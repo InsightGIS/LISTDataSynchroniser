@@ -3,15 +3,15 @@
 #Date: 26/08/13
 #Version: 1.1.0
 #Purpose: To automate the downloading and uploading of GIS data from the LIST FTP server
-#Usage: LISTDataSynchroniser.py -c "c:\Path\to\configFile.txt" (-t 1) the () bit is optional 
+#Usage: LISTDataSynchroniser.py -c "c:\Path\to\config.ini" (-t 1) the () bit is optional 
 #       and will run the method 'processTriggers' from the ExtendedMethods file..
+
+#Updated By: Duri Bradshaw
+#Date: 03/12/15
+#Purpose: Added support for multiple ftp directorys using DIRS = dir1,dir2,dir3 in config file
+
 ####=================####
 
-#
-#Updated: Duri Bradshaw
-#Date: 11/11/15
-#Purpose: Added support for multiple ftp directorys using DIRS = dir1,dir2,dir3 in config file
-#
 
 ##Import statements (could be pared down a bit)
 import os.path, time
@@ -25,7 +25,7 @@ import globals
 
 #handle command line arguments
 processTriggersScript = 0;
-configFile = "thelist_lga107.ini"
+configFile = "config.ini"
 parser = OptionParser()
 parser.add_option("-c", "--config", dest="configFile",
                   help="File to load configuration from", metavar="FILE")
@@ -41,12 +41,16 @@ config.read(configFile)
 
 #[log]
 lf = config.get("log","logFile")
-globals.localPath = config.get("log","localPath")
 
 #set up global variable file
 globals.init(lf)
 
+#[files]
+globals.localPath = config.get("files","localPath")
+globals.unzip = config.get("files","unzip")
+
 #[email]
+globals.sendmail = config.get("email","sendmail")
 globals.emailAddress = config.get("email","emailAddress")
 globals.mailServer = config.get("email","mailServer")
 #globals.emailAddressLIST = [i[1] for i in config.items("listEmail")]
@@ -63,15 +67,6 @@ subjectText = "FTP Download Script Run"
 messageText = ""
 triggerText = ""
 
-#some lists
-tempList = [] #temporary remote file list
-fileList = [] #remote file list, full file details
-fileNames = [] #remote file names (abstracted, e.g., southern water) this is redundant and should be removed
-fileNameTrue = [] #remote file names (actual)
-remoteFileSize = [] #remote file size
-localFileList = []
-localFileSize = []
-
 ##everything else##
 
 #connect to FTP
@@ -87,8 +82,18 @@ except (EOFError, socket.error, ftplib.error_perm):
     connected = 0
 
 if (connected):
-    for cwd in globals.DIRS:
-        ftp.cwd(cwd)
+    for ftpdir in globals.DIRS:
+
+        #some lists
+        tempList = [] #temporary remote file list
+        fileList = [] #remote file list, full file details
+        fileNames = [] #remote file names (abstracted, e.g., southern water) this is redundant and should be removed
+        fileNameTrue = [] #remote file names (actual)
+        remoteFileSize = [] #remote file size
+        localFileList = []
+        localFileSize = []
+
+        ftp.cwd(ftpdir)
         #Find remote files
         ftp.dir(tempList.append)
 
@@ -118,23 +123,23 @@ if (connected):
                 if(fileNames[n] == localFile):    
                     matchNotFound=0
                     if(remoteFileSize[n] == localFileSize[n2]):
-                        globals.logging.debug("Found Match! Don't download file: " + fileNames[n])
+                        globals.logging.debug("Skip download for %s, unchanged file size." % fileNames[n])
                         countMatches = countMatches + 1
                     else:                
-                        globals.logging.info("Found Match! Add file for download: " + fileNames[n])                 
+                        globals.logging.info("File size has changed:" + fileNames[n])
 
                         fullLocalFile = os.path.join(globals.localPath, fileNames[n])
                         fullRemoteFile = fileNameTrue[n]                    
                         ExtendedMethods.downloadFile(fullLocalFile, fullRemoteFile, ftp)                 
                         
             if(matchNotFound):
-                globals.logging.info("Downloading new file: " + rFile)
+                globals.logging.info("New file found: " + rFile)
 
                 fullLocalFile = os.path.join(globals.localPath, fileNames[n])
                 fullRemoteFile = fileNameTrue[n]
                 ExtendedMethods.downloadFile(fullLocalFile, fullRemoteFile, ftp)
 
-        globals.logging.info("%i file matches found, not downloading." %countMatches)
+        globals.logging.info("%i unchanged files found in (%s), not downloading." % (countMatches, ftpdir))
        
         #process triggers, optional step
         triggerText = ''
@@ -153,28 +158,30 @@ if (connected):
         #        globals.logging.warning("Found local file, %s , no longer in remote directory." %i)
         #        warnText = warnText + "Local file: %s no longer in remote directory.\n" %i
 
-        globals.logging.info("Sending email")
-        messageText = "Download was successful\n%i new file(s) downloaded:" %(len(globals.downloadedFiles))
-        messageText = messageText + "\nFiles were downloaded to %s on banshee" %(globals.localPath)
+    globals.logging.info("Download was successful! %i new file(s) downloaded:" % len(globals.downloadedFiles))
+    messageText = "Download was successful\n%i new file(s) downloaded:" % len(globals.downloadedFiles)
 
 else:
     #Script Failed to Connect to FTP
     subjectText = "NOTICE! FTP Script Failed to Connect"
     messageText = "Download Failed, check FTP connection manually and rerun."
 
-##email details##
-for i in globals.downloadedFiles:
-    messageText = messageText + "\n- %s" %i
-
-messageText += triggerText
-
-if(len(warnText) > 1):
-    messageText = messageText + "\n\n~~~Warning!~~~\n" + warnText
-
 #Send email to GIS
-#ExtendedMethods.sendEmail(globals.emailAddress, globals.emailAddress, subjectText, messageText, globals.logFile)
+if (globals.sendmail == "True"):
+    ##email details##
+    for i in globals.downloadedFiles:
+        messageText = messageText + "\n- %s" %i
 
-globals.logging.info("Email sent")
+    messageText += "\nFiles were downloaded to %s" % globals.localPath
+    messageText += triggerText
+
+    if(len(warnText) > 1):
+        messageText = messageText + "\n\n~~~Warning!~~~\n" + warnText
+
+    globals.logging.info("Sending email")
+    ExtendedMethods.sendEmail(globals.emailAddress, globals.emailAddress, subjectText, messageText, globals.logFile)
+    globals.logging.debug("Email sent")
+
 globals.logging.info("Script Ends")
 
 

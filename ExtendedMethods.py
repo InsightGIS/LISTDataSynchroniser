@@ -182,8 +182,9 @@ def downloadFile(localFile, remoteFile, ftp):
 
         globals.downloadedFiles.append(remoteFile)
         globals.logging.info("Retrieved: " + remoteFile + " to: " + localFile)
-        globals.logging.info("Unzipping...")
-        #unzip(localFile, globals.localPath)
+        if globals.unzip == "True":
+            globals.logging.info("Unzipping...")
+            unzip(localFile, globals.localPath)
     except Exception as e:
         globals.logging.error("Failed to retrieve: " + remoteFile + " to: " + localFile + " error was: " + str(e))
         f.close()
