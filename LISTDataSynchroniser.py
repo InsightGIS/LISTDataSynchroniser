@@ -8,7 +8,7 @@
 
 #Updated By: Duri Bradshaw
 #Date: 03/12/15
-#Purpose: Added support for multiple ftp directorys using DIRS = dir1,dir2,dir3 in config file
+#Purpose: Added support for multiple ftp directories using DIRS = dir1,dir2,dir3 in config file
 
 ####=================####
 
