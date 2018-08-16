@@ -1,15 +1,10 @@
 ####=================####
-#Author: Alex Leith
-#Date: 26/08/13
+#Authors: Alex Leith, Duri Bradshaw
+#Date: 03/12/15
 #Version: 1.1.0
 #Purpose: To automate the downloading and uploading of GIS data from the LIST FTP server
 #Usage: LISTDataSynchroniser.py -c "c:\Path\to\config.ini" (-t 1) the () bit is optional 
 #       and will run the method 'processTriggers' from the ExtendedMethods file..
-
-#Updated By: Duri Bradshaw
-#Date: 03/12/15
-#Purpose: Added support for multiple ftp directories using DIRS = dir1,dir2,dir3 in config file
-
 ####=================####
 
 
