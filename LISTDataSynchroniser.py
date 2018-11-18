@@ -1,21 +1,18 @@
 ####=================####
 #Authors: Alex Leith, Duri Bradshaw
-#Date: 03/12/15
-#Version: 1.1.0
+#Date: 09/09/18
+#Version: 2.0.0
 #Purpose: To automate the downloading and uploading of GIS data from the LIST FTP server
 #Usage: LISTDataSynchroniser.py -c "c:\Path\to\config.ini" (-t 1) the () bit is optional 
 #       and will run the method 'processTriggers' from the ExtendedMethods file..
 ####=================####
 
-
 ##Import statements (could be pared down a bit)
-import os.path, time
-import ftplib
-import socket #used to catch ftp error
-import ConfigParser
+import configparser
 from optparse import OptionParser #parse command line arguments
 import ExtendedMethods #a file full of custom methods including triggers.
-import zipfile
+import httpsync
+import ftpsync
 import globals
 
 #handle command line arguments
@@ -31,7 +28,7 @@ if(options.configFile):
     configFile = options.configFile
 processTriggersScript = options.processTriggersScript
 #load config
-config = ConfigParser.ConfigParser()
+config = configparser.ConfigParser()
 config.read(configFile)
 
 #[log]
@@ -41,8 +38,10 @@ lf = config.get("log","logFile")
 globals.init(lf)
 
 #[files]
-globals.localPath = config.get("files","localPath")
-globals.unzip = config.get("files","unzip")
+localPath = config.get("files","localPath")
+unzip = config.get("files","unzip")
+fileTypes = [f.strip().lower() for f in config.get("files","fileTypes").split(',')]
+files = ExtendedMethods.Files(localPath,unzip,fileTypes)
 
 #[email]
 globals.sendmail = config.get("email","sendmail")
@@ -50,118 +49,28 @@ globals.emailAddress = config.get("email","emailAddress")
 globals.mailServer = config.get("email","mailServer")
 #globals.emailAddressLIST = [i[1] for i in config.items("listEmail")]
 
-#[ftpdetails]
-globals.SITE = config.get("ftpdetails","SITE")
-globals.UN = config.get("ftpdetails","UN")
-globals.PW = config.get("ftpdetails","PW")
-globals.DIRS = [e.strip() for e in config.get("ftpdetails","DIRS").split(',')]
-    
+#[serverdetails]
+TYPE = config.get("server","TYPE").upper()
+URL = config.get("server","URL")
+UN = config.get("server","UN")
+PW = config.get("server","PW")
+baseDir = config.get("server","BASEDIR")
+server = ExtendedMethods.Server(TYPE,URL,UN,PW,baseDir)
+
 #email strings
 warnText = ""
 subjectText = "FTP Download Script Run"
 messageText = ""
-triggerText = ""
 
-##everything else##
-
-#connect to FTP
-connected = 0
-try:
-    globals.logging.info('Connecting to FTP site')
-    ftp = ftplib.FTP(globals.SITE)
-    ftp.login(globals.UN,globals.PW)
-    connected = 1
-except (EOFError, socket.error, ftplib.error_perm):
-    print 'Error: FTP Connection failed.'
-    globals.logging.error("FTP Connection Failed...")
-    connected = 0
-
-if (connected):
-    for ftpdir in globals.DIRS:
-
-        #some lists
-        tempList = [] #temporary remote file list
-        fileList = [] #remote file list, full file details
-        fileNames = [] #remote file names (abstracted, e.g., southern water) this is redundant and should be removed
-        fileNameTrue = [] #remote file names (actual)
-        remoteFileSize = [] #remote file size
-        localFileList = []
-        localFileSize = []
-
-        ftp.cwd(ftpdir)
-        #Find remote files
-        ftp.dir(tempList.append)
-
-        for line in tempList:    
-            if (os.path.splitext(line)[1].lower() == '.zip'):
-                fileList.append(line)            
-                fileName, fileSize = ExtendedMethods.getAttributes(line)            
-                fileNameTrue.append(fileName)            
-                remoteFileSize.append(fileSize)
-                globals.logging.debug('found remote: ' + fileName + ", file size is: " + fileSize)
-
-                fileNames.append(fileName)
-
-        #Find local files.
-        for file in os.listdir(globals.localPath):
-            if (os.path.splitext(file)[1].lower() == '.zip'):        
-                localFileList.append(file)
-                file2 = os.path.join(globals.localPath, file)    
-                localFileSize.append(str(os.path.getsize(file2)))
-                globals.logging.debug('found local: ' + file + ", file size is: " + str(localFileSize[-1]))
-
-        #Download new files
-        countMatches = 0
-        for n,rFile in enumerate(fileNames):
-            matchNotFound = 1
-            for n2,localFile in enumerate(localFileList):
-                if(fileNames[n] == localFile):    
-                    matchNotFound=0
-                    if(remoteFileSize[n] == localFileSize[n2]):
-                        globals.logging.debug("Skip download for %s, unchanged file size." % fileNames[n])
-                        countMatches = countMatches + 1
-                    else:                
-                        globals.logging.info("File size has changed:" + fileNames[n])
-
-                        fullLocalFile = os.path.join(globals.localPath, fileNames[n])
-                        fullRemoteFile = fileNameTrue[n]                    
-                        ExtendedMethods.downloadFile(fullLocalFile, fullRemoteFile, ftp)                 
-                        
-            if(matchNotFound):
-                globals.logging.info("New file found: " + rFile)
-
-                fullLocalFile = os.path.join(globals.localPath, fileNames[n])
-                fullRemoteFile = fileNameTrue[n]
-                ExtendedMethods.downloadFile(fullLocalFile, fullRemoteFile, ftp)
-
-        globals.logging.info("%i unchanged files found in (%s), not downloading." % (countMatches, ftpdir))
-       
-        #process triggers, optional step
-        triggerText = ''
-        if(processTriggersScript):
-            triggerText, globals.logging = ExtendedMethods.processTriggers(globals.downloadedFiles)
-        
-		#Disabled by duri, needs update to support multiple ftp dirs
-        #Determine which files are no longer on the server.
-        #for i in localFileList:
-        #    found = 0
-        #    for j in fileNames:
-        #        if(i == j):
-        #            found = 1
-        #            break
-        #    if(not found):
-        #        globals.logging.warning("Found local file, %s , no longer in remote directory." %i)
-        #        warnText = warnText + "Local file: %s no longer in remote directory.\n" %i
-
-    globals.logging.info("Download was successful! %i new file(s) downloaded:" % len(globals.downloadedFiles))
-    messageText = "Download was successful\n%i new file(s) downloaded:" % len(globals.downloadedFiles)
-
+# Downlaod files
+if server.protocol == 'FTP':
+    globals.logging.info("Connecting over FTP")
+    ftpsync.syncDirectory(server,files)
+    
 else:
-    #Script Failed to Connect to FTP
-    subjectText = "NOTICE! FTP Script Failed to Connect"
-    messageText = "Download Failed, check FTP connection manually and rerun."
+    globals.logging.error("Invalid server URL (" + globals.URL + ")")
 
-#Send email to GIS
+#Send email
 if (globals.sendmail == "True"):
     ##email details##
     for i in globals.downloadedFiles:
@@ -177,9 +86,5 @@ if (globals.sendmail == "True"):
     ExtendedMethods.sendEmail(globals.emailAddress, globals.emailAddress, subjectText, messageText, globals.logFile)
     globals.logging.debug("Email sent")
 
+
 globals.logging.info("Script Ends")
-
-
-
-
-
