@@ -6,130 +6,56 @@
 ####=================####
 
 from ftplib import FTP
-import ConfigParser
+import configparser
 import socket
 import os
+import time
 import smtplib
 from email.mime.text import MIMEText
-from email.MIMEMultipart import MIMEMultipart
-from email.MIMEBase import MIMEBase
+from email.mime.multipart import MIMEMultipart
+#from email.MIMEMultipart import MIMEMultipart
+from email.mime.base import MIMEBase
 from email.utils import COMMASPACE
-from email import Encoders
+from email import encoders
 import types
 import globals
 import zipfile
 
-#Check for trigger files and if found, set up trigger. #CUSTOMISE THIS#
-def processTriggers(downloadedFiles):
+#Server details
+class Server:
+    def __init__(self, protocol, url, username, password, directory):
+        self.protocol = protocol
+        self.url = url
+        self.username = username
+        self.password = password
+        self.directory = directory
+
+#File details
+class Files:
+    def __init__(self,localPath,unzip,fileTypes):
+        self.localPath = localPath
+        self.unzip = unzip
+        self.fileTypes = fileTypes
     
-    if(len(downloadedFiles) == 0):
-        globals.logging.info("No files downloaded, so no script triggers checked.")
-        return '',globals.logging
-        
-    #Lists of triggers for FME scripts.
-    fmeTrigger = 0 #FME Script Triggers
-    twTrigger = 0 #SW script trigger
-    
-    #email message text.
-    messageText = ''
-    
-    fmeTriggerList = ['Private_leases.zip',    'leases.zip',    'licences.zip',    'pluc.zip',    'lga_reserves.zip',    'transport.zip']
-    TasWaterTriggerList = ['ReuseLines.zip', 'ReusePts.zip', 'SewerLines.zip', 'SewerPts.zip', 'WaterLines.zip', 'WaterPts.zip']
-    
-    #Required: Buildings, Heritage, Contours 2m, Public Toilets, AssetAreas, Kerbs, Zoning, Notations, Ordinance, stormwaterpipes, stormwaterpits
-    monthlyFilesList = [\
-        "C:\GIS\Projects\External\Scheduled\LIST_ftp\Upload\Buildings",\
-        "TopographicInformation\Cultural\Heritage",\
-        "TopographicInformation\Infrastructure\BuildingPlumbing\PublicToilets",\
-        "TopographicInformation\Transport\kerbs",\
-        "LandUseAndAdministration\Planning\zoning",\
-        "LandUseAndAdministration\Planning\Notations",\
-        "TopographicInformation\Infrastructure\Stormwater\Stormwaterpipes",\
-        "TopographicInformation\Infrastructure\Stormwater\Lagoons",\
-        "TopographicInformation\Infrastructure\Stormwater\Stormwaterpits"]
-    
-    for j in downloadedFiles:
-        #monthly script
-        for k in fmeTriggerList:
-            if(k == j):
-                fmeTrigger = 1
-        #tas water script
-        for l in TasWaterTriggerList:
-            if(l == j):
-                twTrigger = 1
+#Shared Methods
+
+#Find local files.
+def getLocalFiles(files):
+    localFiles = []
+
+    for file in os.listdir(files.localPath):
+        if (os.path.splitext(file)[1].lower() in files.fileTypes):
+            path = os.path.join(files.localPath, file)
+            size = os.path.getsize(path)
+            timestamp = time.strftime('%Y%m%d%H%M%S', time.gmtime(os.path.getmtime(path)))
             
-    if(fmeTrigger):
-        globals.logging.info("Downloaded an FME trigger layer, triggering the FME script.")
-        os.system("C:\Scripts\FME\monthly.cmd")
-        globals.logging.info("FME Monthly Script has been run.")
-        
-        globals.logging.info("Zipping and Uploading Data.")
-        
-        rootDir = "C:\GIS\Corporate"
-        sentItems = []
-        
-        #connect to FTP
-        connected = 0
-        try:
-            globals.logging.info('Connecting to FTP site for Upload')
-            ftp = FTP(globals.SITE)
-            ftp.login(globals.UN,globals.PW)
-            connected = 1
-        except (EOFError, socket.error):
-            globals.logging.error("FTP Connection Failed")
-            connected = 0
-        
-        if(connected):
-            for uploadItem in monthlyFilesList:
-                #Set up files for monthly upload...                
-                destFile = uploadItem.split('\\')[-1] + ".zip"
-                sentItems.append(destFile)
-                if (not "C:\\" in uploadItem):
-                    source = os.path.join(rootDir, uploadItem) + ".*"
-                else:
-                    source = uploadItem + ".*"
-                    
-                destination = os.path.join("C:\GIS\Projects\External\Scheduled\LIST_ftp\Upload", destFile)
-                os.system(r'"C:\Program Files\7-Zip\7z.exe" a %s %s -tzip' %(destination, source))
+            localFiles.append([file,size,int(timestamp)])            
             
-                fp = open(destination,'rb') # file to send
-                ftp.storbinary('STOR dpiwe_upload/Stormwaterpipes.zip', fp)
-            
-            globals.logging.info("GCC Data uploaded to The LIST. Notifying them of datasets uploaded.")
-            
-            #email The LIST
-            subjectTextLIST = "GCC Data Supply"    
-            messageTextLIST = "Hi there \n\nWe supplied:\n"
-            for i in sentItems:
-                messageTextLIST = messageTextLIST + "* " + i + "\n"
-            messageTextLIST = messageTextLIST + "\nRegards,\n\nGCC GIS\ngis@gcc.tas.gov.au"
-            
-            sendEmail(globals.emailAddress, globals.emailAddressLIST, subjectTextLIST, messageTextLIST, "0")
-            globals.logging.info("Email sent to The LIST")
-        else:
-            globals.logging.warning("Monthly data upload FAILED!")
-            messageText = messageText + "\n\nWarning: Monthly data upload FAILED!\n"
+            globals.logging.debug('found local: %s, file size is: %s, timestamp is %s' %(file,size,timestamp))
 
-        ftp.quit()
+    return localFiles
 
-    if(twTrigger):
-        globals.logging.info("Downloaded a Southern Water trigger layer, triggering the FME script.")
-        os.system("C:\\Scripts\\FME\\tasWater.cmd")
-        globals.logging.info("SW Script has been run.")
-
-    if(fmeTrigger):
-        messageText = messageText + "\n\nNOTE: FME script was run, data were uploaded to The LIST.\nCheck for other data to upload this month, update the Data Dictionary and notify The List.\n"
-
-    if(twTrigger):
-        messageText = messageText + "\n\nNOTE: Southern Water (WaterSewer) script was run. Update the Data Dictionary and check Exponare.\n"
-
-    return messageText, globals.logging
-
-    
-#OTHER METHODS
-##METHODS##
-
-#sends an email with one subject, message and attachment
+#Sends an email with one subject, message and attachment
 def sendEmail(emailFrom, emailTo, subject, message, attachment):
     msg = MIMEMultipart()
     msg['Subject'] = subject
@@ -155,41 +81,8 @@ def sendEmail(emailFrom, emailTo, subject, message, attachment):
     s.sendmail(emailFrom, emailTo, msg.as_string())
     s.quit()
     
-#takes input from the file listing from the ftp site and returns a list of file names (fn) and file sizes (fs)
-def getAttributes(line):
-    lineSplit = line.split(' ')
-    lineSplit = [x for x in lineSplit if x != ""]
-    
-    #file size
-    fs = lineSplit[4]
-    fnList = lineSplit[8:]
-    
-    #file name
-    fn = ""
-    for i in fnList:
-        fn = fn + i + " "
-    fn = fn.strip()
-    
-    return fn,fs
 
-def downloadFile(localFile, remoteFile, ftp):
-    f = open(localFile,"wb")
-
-    print "Downloading: "+remoteFile
-    try:
-        ftp.retrbinary("RETR " + remoteFile, f.write)
-        f.close()
-
-        globals.downloadedFiles.append(remoteFile)
-        globals.logging.info("Retrieved: " + remoteFile + " to: " + localFile)
-        if globals.unzip == "True":
-            globals.logging.info("Unzipping...")
-            unzip(localFile, globals.localPath)
-    except Exception as e:
-        globals.logging.error("Failed to retrieve: " + remoteFile + " to: " + localFile + " error was: " + str(e))
-        f.close()
-
-#unzip files
+#Unzip files
 def unzip(zipFilePath, destDir):
     zfile = zipfile.ZipFile(zipFilePath)
     for name in zfile.namelist():
