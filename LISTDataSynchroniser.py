@@ -68,7 +68,7 @@ if server.protocol == 'FTP':
     ftpsync.syncDirectory(server,files)
     
 else:
-    globals.logging.error("Invalid server URL (" + globals.URL + ")")
+    globals.logging.error("Invalid server URL (" + URL + ")")
 
 #Send email
 if (globals.sendmail == "True"):
@@ -76,8 +76,7 @@ if (globals.sendmail == "True"):
     for i in globals.downloadedFiles:
         messageText = messageText + "\n- %s" %i
 
-    messageText += "\nFiles were downloaded to %s" % globals.localPath
-    messageText += triggerText
+    messageText += "\nFiles were downloaded to %s" % localPath
 
     if(len(warnText) > 1):
         messageText = messageText + "\n\n~~~Warning!~~~\n" + warnText

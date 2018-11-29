@@ -60,12 +60,12 @@ def sendEmail(emailFrom, emailTo, subject, message, attachment):
     msg = MIMEMultipart()
     msg['Subject'] = subject
     msg['From'] = emailFrom
-    
-    if(type(emailTo) == types.ListType):
-        msg['To'] = COMMASPACE.join(emailTo)
-    else:
-        msg['To'] = emailTo
-        emailTo = [emailTo]
+
+#    if(type(emailTo) == types.ListType):
+#        msg['To'] = COMMASPACE.join(emailTo)
+#    else:
+    msg['To'] = emailTo
+    emailTo = [emailTo]
     
     msg.attach(MIMEText(message))
     
@@ -73,7 +73,7 @@ def sendEmail(emailFrom, emailTo, subject, message, attachment):
         #attach the log file
         part = MIMEBase('application', "octet-stream")
         part.set_payload( open(globals.logFile,"rb").read() )
-        Encoders.encode_base64(part)
+        encoders.encode_base64(part)
         part.add_header('Content-Disposition', 'attachment; filename="%s"' % os.path.basename(globals.logFile))
         msg.attach(part)
     

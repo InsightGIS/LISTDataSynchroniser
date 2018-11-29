@@ -88,7 +88,7 @@ def ftpDownloadFile(connection, remoteFile, localFile, files):
         globals.logging.info("Retrieved: " + remoteFile + " to: " + localFile)
         if files.unzip == "True":
             globals.logging.info("Unzipping...")
-            unzip(localFile, files.localPath)
+            ExtendedMethods.unzip(localFile, files.localPath)
     except Exception as e:
         globals.logging.error("Failed to retrieve: " + remoteFile + " to: " + localFile + " error was: " + str(e))
         f.close()
