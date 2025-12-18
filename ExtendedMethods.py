@@ -5,9 +5,9 @@
 #Purpose: Gets methods out of the main body. There is a custom 'processTriggers' method that needs to be removed for most people.
 ####=================####
 
-from ftplib import FTP
-import configparser
-import socket
+#from ftplib import FTP
+#import configparser
+#import socket
 import os
 import time
 import smtplib
@@ -15,20 +15,20 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 #from email.MIMEMultipart import MIMEMultipart
 from email.mime.base import MIMEBase
-from email.utils import COMMASPACE
+#from email.utils import COMMASPACE
 from email import encoders
-import types
+#import types
 import globals
 import zipfile
 
 #Server details
 class Server:
-    def __init__(self, protocol, url, username, password, directory):
+    def __init__(self, protocol, url, username, password, directories):
         self.protocol = protocol
         self.url = url
         self.username = username
         self.password = password
-        self.directory = directory
+        self.directories = directories
 
 #File details
 class Files:

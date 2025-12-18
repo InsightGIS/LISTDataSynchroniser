@@ -54,15 +54,15 @@ TYPE = config.get("server","TYPE").upper()
 URL = config.get("server","URL")
 UN = config.get("server","UN")
 PW = config.get("server","PW")
-baseDir = config.get("server","BASEDIR")
-server = ExtendedMethods.Server(TYPE,URL,UN,PW,baseDir)
+remoteDirs = [dir.strip() for dir in config.get("server","REMOTEDIRS").split(',')]
+server = ExtendedMethods.Server(TYPE,URL,UN,PW,remoteDirs)
 
 #email strings
 warnText = ""
 subjectText = "FTP Download Script Run"
 messageText = ""
 
-# Downlaod files
+# Download files
 if server.protocol == 'FTP':
     globals.logging.info("Connecting over FTP")
     ftpsync.syncDirectory(server,files)
